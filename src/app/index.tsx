@@ -3,49 +3,8 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { styles } from "./styles";
 
-interface Food {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  emoji: string;
-}
-
-const foods: Food[] = [
-  {
-    id: 1,
-    name: "Mie Ayam",
-    description: "Mie kenyal dengan ayam berbumbu dan kuah gurih.",
-    price: 12000,
-    category: "Makanan",
-    emoji: "🍜",
-  },
-  {
-    id: 2,
-    name: "Nasi Goreng",
-    description: "Nasi goreng spesial dengan telur dan bumbu pilihan.",
-    price: 15000,
-    category: "Makanan",
-    emoji: "🍳",
-  },
-  {
-    id: 3,
-    name: "Ayam Geprek",
-    description: "Ayam crispy dengan sambal geprek yang pedas.",
-    price: 18000,
-    category: "Makanan",
-    emoji: "🍗",
-  },
-  {
-    id: 4,
-    name: "Es Teh",
-    description: "Minuman teh manis dingin yang menyegarkan.",
-    price: 5000,
-    category: "Minuman",
-    emoji: "🧋",
-  },
-];
+import { fetchMenuFromAPI } from "../services/foodService";
+import type { Food } from "../types/food";
 
 function formatPrice(price: number): string {
   return `Rp ${price.toLocaleString("id-ID")}`;
@@ -54,20 +13,42 @@ function formatPrice(price: number): string {
 export default function Index() {
   const router = useRouter();
 
-  // 1. Implementation of useState[cite: 7, 40]
-  const [selectedCategory, setSelectedCategory] = useState<string>("Semua");
-  const [filteredCount, setFilteredCount] = useState<number>(foods.length);
+  // Menyimpan data makanan dari API
+  const [foods, setFoods] = useState<Food[]>([]);
 
-  // Filter logika makanan berdasarkan kategori
+  // Menyimpan kategori yang dipilih
+  const [selectedCategory, setSelectedCategory] = useState<string>("Semua");
+
+  // Menyimpan status loading dan error
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Mengambil data menu dari External API
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    fetchMenuFromAPI()
+      .then((response) => {
+        setFoods(response.data);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Terjadi kesalahan saat mengambil menu",
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  // Filter makanan berdasarkan kategori
   const filteredFoods = foods.filter((food) => {
     if (selectedCategory === "Semua") return true;
     return food.category === selectedCategory;
   });
-
-  // 2. Implementation of useEffect[cite: 9, 40]
-  useEffect(() => {
-    setFilteredCount(filteredFoods.length);
-  }, [selectedCategory]);
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -97,21 +78,31 @@ export default function Index() {
         </Text>
       </View>
 
-      {/* FILTER CATEGORY (useState Control) */}
-      <View style={{ flexDirection: "row", marginBottom: 16, gap: 8 }}>
+      {/* FILTER CATEGORY */}
+      <View
+        style={{
+          flexDirection: "row",
+          marginBottom: 16,
+          gap: 8,
+        }}
+      >
         {["Semua", "Makanan", "Minuman"].map((cat) => (
           <Pressable
             key={cat}
             style={[
               styles.menuBadge,
-              selectedCategory === cat && { backgroundColor: "#171717" },
+              selectedCategory === cat && {
+                backgroundColor: "#171717",
+              },
             ]}
             onPress={() => setSelectedCategory(cat)}
           >
             <Text
               style={[
                 styles.menuBadgeText,
-                selectedCategory === cat && { color: "#FFFFFF" },
+                selectedCategory === cat && {
+                  color: "#FFFFFF",
+                },
               ]}
             >
               {cat}
@@ -130,47 +121,76 @@ export default function Index() {
         </View>
 
         <View style={styles.menuBadge}>
-          <Text style={styles.menuBadgeText}>{filteredCount} Menu</Text>
+          <Text style={styles.menuBadgeText}>{filteredFoods.length} Menu</Text>
         </View>
       </View>
 
-      {/* LOOP DENGAN map() */}
-      {filteredFoods.map((food) => (
-        <View key={food.id} style={styles.foodCard}>
-          <View style={styles.foodIcon}>
-            <Text style={styles.foodEmoji}>{food.emoji}</Text>
-          </View>
+      {/* LOADING */}
+      {loading && (
+        <Text style={{ textAlign: "center", marginVertical: 20 }}>
+          Sedang memuat menu...
+        </Text>
+      )}
 
-          <View style={styles.foodContent}>
-            <Text style={styles.category}>{food.category}</Text>
-            <Text style={styles.foodName}>{food.name}</Text>
-            <Text style={styles.foodDescription}>{food.description}</Text>
+      {/* ERROR */}
+      {!loading && error && (
+        <Text
+          style={{
+            color: "red",
+            textAlign: "center",
+            marginVertical: 20,
+          }}
+        >
+          {error}
+        </Text>
+      )}
 
-            <View style={styles.foodBottom}>
-              <Text style={styles.price}>{formatPrice(food.price)}</Text>
+      {/* EMPTY MENU */}
+      {!loading && !error && filteredFoods.length === 0 && (
+        <Text style={{ textAlign: "center", marginVertical: 20 }}>
+          Tidak ada menu pada kategori ini.
+        </Text>
+      )}
 
-              {/* 3. Implementation of push()[cite: 31, 40] */}
-              <Pressable
-                style={styles.button}
-                onPress={() =>
-                  router.push({
-                    pathname: "/detail/[id]" as any,
-                    params: {
-                      id: food.id,
-                      name: food.name,
-                      price: food.price,
-                      emoji: food.emoji,
-                      description: food.description,
-                    },
-                  })
-                }
-              >
-                <Text style={styles.buttonText}>Pesan</Text>
-              </Pressable>
+      {/* DAFTAR MAKANAN */}
+      {!loading &&
+        !error &&
+        filteredFoods.map((food) => (
+          <View key={food.id} style={styles.foodCard}>
+            <View style={styles.foodIcon}>
+              <Text style={styles.foodEmoji}>{food.emoji}</Text>
+            </View>
+
+            <View style={styles.foodContent}>
+              <Text style={styles.category}>{food.category}</Text>
+              <Text style={styles.foodName}>{food.name}</Text>
+              <Text style={styles.foodDescription}>{food.description}</Text>
+
+              <View style={styles.foodBottom}>
+                <Text style={styles.price}>{formatPrice(food.price)}</Text>
+
+                {/* TOMBOL PESAN */}
+                <Pressable
+                  style={styles.button}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/detail/[id]" as any,
+                      params: {
+                        id: food.id,
+                        name: food.name,
+                        price: food.price,
+                        emoji: food.emoji,
+                        description: food.description,
+                      },
+                    })
+                  }
+                >
+                  <Text style={styles.buttonText}>Pesan</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      ))}
+        ))}
 
       {/* FOOTER */}
       <View style={styles.footer}>
